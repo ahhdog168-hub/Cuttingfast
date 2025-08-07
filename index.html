@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Copyright Processor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .video-container {
+            margin: 20px 0;
+        }
+        video {
+            width: 100%;
+            background-color: black;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #3367d6;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .progress-container {
+            display: none;
+            margin: 15px 0;
+        }
+        progress {
+            width: 100%;
+        }
+        .options {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .option-group {
+            margin: 10px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Copyright Processor</h1>
+        <p>Upload a video to automatically transform it for copyright-safe posting</p>
+        
+        <div class="controls">
+            <input type="file" id="videoUpload" accept="video/*">
+            <button id="processBtn">Process Video</button>
+            <button id="downloadBtn" disabled>Download Processed Video</button>
+        </div>
+        
+        <div class="progress-container" id="progressContainer">
+            <progress id="progressBar" value="0" max="100"></progress>
+            <div id="statusText">Processing...</div>
+        </div>
+        
+        <div class="options">
+            <h3>Processing Options</h3>
+            <div class="option-group">
+                <label for="speedFactor">Speed Variation (0.8x - 1.2x):</label>
+                <input type="range" id="speedFactor" min="0.8" max="1.2" step="0.05" value="1.0">
+                <span id="speedValue">1.0x</span>
+            </div>
+            
+            <div class="option-group">
+                <label for="pitchFactor">Pitch Variation (0.8x - 1.2x):</label>
+                <input type="range" id="pitchFactor" min="0.8" max="1.2" step="0.05" value="1.0">
+                <span id="pitchValue">1.0x</span>
+            </div>
+            
+            <div class="option-group">
+                <label>
+                    <input type="checkbox" id="addWatermark" checked> Add random watermark
+                </label>
+                <label>
+                    <input type="checkbox" id="addFilters" checked> Apply visual filters
+                </label>
+                <label>
+                    <input type="checkbox" id="changeAspect" checked> Change aspect ratio
+                </label>
+            </div>
+        </div>
+        
+        <div class="video-container">
+            <h3>Original Video</h3>
+            <video id="originalVideo" controls></video>
+        </div>
+        
+        <div class="video-container">
+            <h3>Processed Video</h3>
+            <video id="processedVideo" controls></video>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const videoUpload = document.getElementById('videoUpload');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const originalVideo = document.getElementById('originalVideo');
+        const processedVideo = document.getElementById('processedVideo');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+        const speedFactor = document.getElementById('speedFactor');
+        const pitchFactor = document.getElementById('pitchFactor');
+        const speedValue = document.getElementById('speedValue');
+        const pitchValue = document.getElementById('pitchValue');
+        const addWatermark = document.getElementById('addWatermark');
+        const addFilters = document.getElementById('addFilters');
+        const changeAspect = document.getElementById('changeAspect');
+
+        // Update slider displays
+        speedFactor.addEventListener('input', () => {
+            speedValue.textContent = speedFactor.value + 'x';
+        });
+        
+        pitchFactor.addEventListener('input', () => {
+            pitchValue.textContent = pitchFactor.value + 'x';
+        });
+
+        // Handle video upload
+        videoUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                originalVideo.src = URL.createObjectURL(file);
+                downloadBtn.disabled = true;
+            }
+        });
+
+        // Process video button
+        processBtn.addEventListener('click', async function() {
+            if (!videoUpload.files[0]) {
+                alert('Please upload a video first');
+                return;
+            }
+            
+            processBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            statusText.textContent = 'Processing...';
+            
+            const formData = new FormData();
+            formData.append('video', videoUpload.files[0]);
+            formData.append('speed', speedFactor.value);
+            formData.append('pitch', pitchFactor.value);
+            formData.append('watermark', addWatermark.checked);
+            formData.append('filters', addFilters.checked);
+            formData.append('aspect', changeAspect.checked);
+
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(await response.text());
+                }
+
+                // Handle progress (if server supports it)
+                const reader = response.body.getReader();
+                const contentLength = +response.headers.get('Content-Length');
+                let receivedLength = 0;
+                let chunks = [];
+                
+                while(true) {
+                    const {done, value} = await reader.read();
+                    
+                    if (done) break;
+                    
+                    chunks.push(value);
+                    receivedLength += value.length;
+                    
+                    if (contentLength) {
+                        progressBar.value = (receivedLength / contentLength) * 100;
+                        statusText.textContent = `Processing... ${Math.round(progressBar.value)}%`;
+                    }
+                }
+                
+                // Combine chunks
+                const blob = new Blob(chunks);
+                const videoUrl = URL.createObjectURL(blob);
+                
+                processedVideo.src = videoUrl;
+                downloadBtn.disabled = false;
+                
+                // Make download button work
+                downloadBtn.onclick = () => {
+                    const a = document.createElement('a');
+                    a.href = videoUrl;
+                    a.download = 'copyright-safe_' + videoUpload.files[0].name;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                };
+                
+                statusText.textContent = 'Processing complete!';
+                
+            } catch (error) {
+                console.error('Error:', error);
+                statusText.textContent = 'Error: ' + error.message;
+            } finally {
+                processBtn.disabled = false;
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
